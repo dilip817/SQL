@@ -1,0 +1,35 @@
+a) Cumulative distribution in sql
+
+select date_registered,
+       (select sum(t2.sales)
+        from t t2
+        where t2.date_registered <= t.date_registered
+       ) as cumulative_sales
+from table t;
+
+b) DISTINCT or GROUP BY to eliminate duplicates
+DISTINCT will be faster only if you DON'T have an index (as it doesn't sort). When you do have an index and it's used, they're synonyms
+
+A query optimizer would have to catch the fact that your GROUP BY is not taking advantage of any group members, just their keys. DISTINCT makes this explicit, so you can get away with a slightly dumber optimizer.
+
+c) Convert hierarchical data into flat data - what join ?
+
+
+d) How can we transpose a table using SQL (changing rows to column or vice-versa) ?
+Use CASE statement or DECODE statement.
+
+e) How to generate row number in SQL Without ROWNUM
+SELECT name, sal, (SELECT COUNT(*)  FROM EMPLOYEE i WHERE  i.name  <= o.name) row_num
+FROM EMPLOYEE o
+order by row_num
+
+f) How to select first 5 records from a table?
+
+In Oracle,
+SELECT * 
+FROM EMP
+WHERE ROWNUM <= 5;
+
+In SQL Server,
+SELECT TOP 5 * FROM EMP;
+
