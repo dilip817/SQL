@@ -1,0 +1,1581 @@
+
+-----------------------------> Check product SKUs
+
+SELECT segment_name, segment_type, bytes/1024/1024 MB
+FROM user_segments
+WHERE segment_type='TABLE' 
+order by bytes desc;
+
+select PRODUCT, CI_PRODUCT_CLOUD, PTB_Product, level1, level2 
+from markusanderle.acv_ptb
+--where product = 'App Dev'
+--and PTB_product <> 'App'
+group by PRODUCT, CI_PRODUCT_CLOUD, PTB_Product, level1, level2
+order by PRODUCT, CI_PRODUCT_CLOUD, PTB_Product, level1, level2;
+
+select *  
+from markusanderle.acv_ptb
+where product = 'App Dev'
+and PTB_product <> 'App';
+
+select * from markusanderle.acv_ptb;
+
+select * from markusanderle.aov_ptb;
+
+select * from markusanderle.min_acct_date;
+
+
+-----------------------------> Create account master table
+--Min date table
+drop table min_aov_date;
+
+select * from min_aov_date;
+
+create table min_aov_date as 
+select acct_id,min(snap_date) as min_aov_date from dflanery.AOVBEGINPRODUCT
+where beginaov>0 
+group by acct_id;
+
+-------------------> check account level tables 
+
+select * from dflanery.ACCOUNT_MAPPING_PAYING
+where AOV > 1000;
+
+-- select top 5 values from a table
+SELECT * 
+FROM EMP
+WHERE ROWNUM <= 5
+
+-- ('SMB', 'ENTR', 'MM', 'ESB', 'CMRCL-GEO', 'PS', 'Other', 'ECS')
+-- final table
+
+-- Find region
+Create table temp as
+select ACCT_ID_NK, 
+CASE 
+    when a.ACCT_MKT_SEG_NM_DERIVED = 'ENTR' OR a.ACCT_MKT_SEG_NM_DERIVED = 'ECS' then 'EBU'
+    when a.ACCT_MKT_SEG_NM_DERIVED in ('CMRCL-GEO','CMRCL-NAMED') OR a.ACCT_MKT_SEG_NM_DERIVED = 'MM' then 'CMRCL'
+    when a.ACCT_MKT_SEG_NM_DERIVED = 'ESB' OR a.ACCT_MKT_SEG_NM_DERIVED = 'SMB' then 'ESMB'
+    when (a.ACCT_MKT_SEG_NM_DERIVED in ('PS','Other')) then 'EBU'
+    when (a.ACCT_MKT_SEG_NM_DERIVED in ('PS','Other', NULL) and aov < 20000) then 'ESMB'
+    when (a.ACCT_MKT_SEG_NM_DERIVED in ('PS', 'Other') and aov between 20000 and 300000) then 'CMRCL'
+    else 'Other'
+end as ptb_segment
+from dflanery.ACCOUNT_MAPPING_PAYING a;
+
+select count(*), ACCT_MKT_SEG_NM_DERIVED
+from dflanery.ACCOUNT_MAPPING_PAYING
+group by ACCT_MKT_SEG_NM_DERIVED
+order by count(*) desc;
+
+select * from dflanery.ACCOUNT_MAPPING_PAYING a;
+--acct_id_nk, aov, ACCT_MKT_SEG_NM_DERIVED
+
+-- Find right account and market segment
+SELECT count(distinct ACCT_ID_NK), c.ACCT_MKT_SEG_NM_DERIVED as MARKETSEGMENT
+from dflanery.ACCOUNT_MAPPING_PAYING c
+where AOV > 1000
+group by ACCT_MKT_SEG_NM_DERIVED
+order by count(distinct ACCT_ID_NK) desc;
+
+SELECT count(distinct ACCT_ID_NK), c.ACCT_MKT_SEG_NM_DERIVED as MARKETSEGMENT
+from dflanery.ACCOUNT_MAPPING_PAYING c
+--where AOV > 1000
+group by ACCT_MKT_SEG_NM_DERIVED
+order by count(distinct ACCT_ID_NK) desc;
+
+select * from account_master;
+
+select count(*) from account_master;
+
+select * from markusanderle.train_data;
+
+select * from markusanderle.train_data
+where SNAP_MONTH_CODE = 84 ;
+
+select * from 
+DM_S.FACT_EWS_SCORE_METRIC_SNAP@bidwprd_bu;
+
+-- Not able to connect to ods_account
+select * from ods.ods_account@odsprd_bu;
+
+
+drop table min_aov_date;
+
+create table min_aov_date as 
+select acct_id,min(snap_date) as min_aov_date from dflanery.AOVBEGINPRODUCT
+where beginaov>0 
+group by acct_id;
+
+drop table min_acct_date;
+
+create table min_acct_date as 
+select a.acct_id_nk,COALESCE(a.firstactivedate,b.min_aov_date) as min_date  
+from dilippatel.account_master a left join min_aov_date b on a.acct_id_nk=b.acct_id
+where paying=1;
+
+
+drop table account_master;
+
+-- version 1
+Create table account_master as
+SELECT a.ACCT_ID_NK, a.ACCT_NM as account_name, a.COMBO_ID_CNTRY_CO as COMBO_ID, a.COMPANY_COUNTRY_NAME,
+a.ACCOUNT_MACROSEGMENT_DERIVED AS MACROSEGMENT,
+CASE  
+    when a.ACCT_MKT_SEG_NM_DERIVED = 'ENTR' OR a.ACCT_MKT_SEG_NM_DERIVED = 'ECS' then 'EBU'
+    when a.ACCT_MKT_SEG_NM_DERIVED in ('CMRCL-GEO','CMRCL-NAMED') OR a.ACCT_MKT_SEG_NM_DERIVED = 'MM' then 'CMRCL'
+    when a.ACCT_MKT_SEG_NM_DERIVED = 'ESB' OR a.ACCT_MKT_SEG_NM_DERIVED = 'SMB' then 'ESMB'
+    when (a.ACCT_MKT_SEG_NM_DERIVED in ('PS','Other', NULL) and aov < 20000) then 'ESMB'
+    when (a.ACCT_MKT_SEG_NM_DERIVED in ('PS', 'Other') and aov between 20000 and 300000) then 'CMRCL'
+    when (a.ACCT_MKT_SEG_NM_DERIVED in ('PS','Other')) then 'EBU'
+    else 'Other' 
+end as ptb_mkt_segment,
+a.ACCT_MKT_SEG_NM_DERIVED as MARKETSEGMENT,
+CASE when a.ACCOUNT_MACROSEGMENT_DERIVED = 'ENTR' and ( a.ACCT_MKT_SEG_NM_DERIVED  = 'ENTR' or a.ACCT_MKT_SEG_NM_DERIVED = 'ECS') then 'EBU'
+when a.ACCOUNT_MACROSEGMENT_DERIVED = 'CMRCL' and ( a.ACCT_MKT_SEG_NM_DERIVED = 'CMRCL-GEO' or a.ACCT_MKT_SEG_NM_DERIVED = 'MM') then 'CBU_MM_GB'
+when (a.ACCOUNT_MACROSEGMENT_DERIVED = 'CMRCL' or a.ACCOUNT_MACROSEGMENT_DERIVED = 'ESMB') and ( a.ACCT_MKT_SEG_NM_DERIVED = 'ESB' or a.ACCT_MKT_SEG_NM_DERIVED = 'SMB') then 'ESMB' 
+else 'Other' end as EBU_CBU,
+a.SHIPPING_REGION as REGION,
+a.paying, 
+NVL(b.LOCKED_INDUSTRY__C, a.IND_ACCT_SUMMARY_NM) as derived_Industry, b.LOCKED_SECTOR__C, NVL(b.LOCKED_SUBSECTOR__C, a.CO_IND_SECTOR) as derived_sub_sector, FY_SIC__C,
+INVESTOR_RELATIONS__C, ISPARTNER, LOCKED_EMPLOYEES__C, NON_PROFIT_ACCOUNT__C, OWNERSHIP, TICKERSYMBOL, 
+TYPE, YEAR_STARTED__C, site, rating, HQ__C, ORG_STATUS_DW__C, ORG_ATTACHED__C, annualrevenue,
+COALESCE(a.firstactivedate,c.min_aov_date) as min_date
+from dflanery.ACCOUNT_MAPPING_PAYING a
+left join ods.ods_account@odsprd_bu b
+on id_15 = ACCT_ID_NK
+left join min_aov_date c
+on a.acct_id_nk=c.acct_id;
+
+
+-- veersion 2
+Create table account_master as
+SELECT a.ACCT_ID_NK, a.ACCT_NM as account_name, a.COMBO_ID_CNTRY_CO as COMBO_ID, a.COMPANY_COUNTRY_NAME,
+a.ACCOUNT_MACROSEGMENT_DERIVED AS MACROSEGMENT,
+CASE  
+    when a.ACCT_MKT_SEG_NM_DERIVED in ('ENTR','ECS','KEY','STRAT') then 'EBU'
+    when a.ACCT_MKT_SEG_NM_DERIVED in ('CMRCL-GEO','CMRCL-NAMED','MID-CMRCL','GEN-CMRCL','SELECT') then 'CMRCL'  
+    when a.ACCT_MKT_SEG_NM_DERIVED in ('ESB','SMB','GRB','SB','MM') then 'ESMB'
+    when (a.ACCT_MKT_SEG_NM_DERIVED in ('PS','Other', NULL) and aov < 20000) then 'ESMB'
+    when (a.ACCT_MKT_SEG_NM_DERIVED in ('PS', 'Other') and aov between 20000 and 300000) then 'CMRCL'
+    when (a.ACCT_MKT_SEG_NM_DERIVED in ('PS','Other','ECS PS')) then 'EBU'
+    else 'Other' 
+end as ptb_mkt_segment,
+a.ACCT_MKT_SEG_NM_DERIVED as MARKETSEGMENT,
+--CASE when a.ACCOUNT_MACROSEGMENT_DERIVED = 'ENTR' and ( a.ACCT_MKT_SEG_NM_DERIVED  = 'ENTR' or a.ACCT_MKT_SEG_NM_DERIVED = 'ECS') then 'EBU'
+--when a.ACCOUNT_MACROSEGMENT_DERIVED = 'CMRCL' and ( a.ACCT_MKT_SEG_NM_DERIVED = 'CMRCL-GEO' or a.ACCT_MKT_SEG_NM_DERIVED = 'MM') then 'CBU_MM_GB'
+--when (a.ACCOUNT_MACROSEGMENT_DERIVED = 'CMRCL' or a.ACCOUNT_MACROSEGMENT_DERIVED = 'ESMB') and ( a.ACCT_MKT_SEG_NM_DERIVED = 'ESB' or a.ACCT_MKT_SEG_NM_DERIVED = 'SMB') then 'ESMB' 
+--else 'Other' end as EBU_CBU,
+a.SHIPPING_REGION as REGION,
+a.paying, 
+NVL(b.LOCKED_INDUSTRY__C, a.IND_ACCT_SUMMARY_NM) as derived_Industry, b.LOCKED_SECTOR__C, NVL(b.LOCKED_SUBSECTOR__C, a.CO_IND_SECTOR) as derived_sub_sector, FY_SIC__C,
+INVESTOR_RELATIONS__C, ISPARTNER, LOCKED_EMPLOYEES__C, NON_PROFIT_ACCOUNT__C, OWNERSHIP, TICKERSYMBOL, 
+TYPE, YEAR_STARTED__C, site, rating, HQ__C, ORG_STATUS_DW__C, ORG_ATTACHED__C, annualrevenue,
+COALESCE(a.firstactivedate,c.min_aov_date) as min_date
+from dflanery.ACCOUNT_MAPPING_PAYING a
+left join ods.ods_account@odsprd_bu b
+on id_15 = ACCT_ID_NK
+left join min_aov_date c
+on a.acct_id_nk=c.acct_id;
+
+
+select * from ods.ods_account@odsprd_bu
+where id_15 = '0013000000HFk0d';
+
+select count(*), ACCOUNT_MACROSEGMENT_DERIVED from 
+dflanery.ACCOUNT_MAPPING_PAYING
+group by ACCOUNT_MACROSEGMENT_DERIVED ;
+ 
+where ACCT_ID_NK = '0013000000HFk0d';
+
+SELECT count(*), ACCT_MKT_SEG_NM_DERIVED
+FROM dflanery.ACCOUNT_MAPPING_PAYING 
+where ACCT_DERIVED_REGN = 'AMER'
+group by ACCT_MKT_SEG_NM_DERIVED
+order by count(*) desc;
+
+grant select on account_master to dflanery;
+
+grant select on account_master to MarkusAnderle;
+
+grant select on account_master to mgoker;
+
+grant select on account_master to bnanduri;
+
+select count(*) from MarkusAnderle.train_data;
+
+drop table PERC_AOV_PTB;
+
+create table PERC_AOV_PTB as
+SELECT ACCT_ID,SNAP_MONTH_CODE, PTB_PRODUCT, AOV_PTB_PERC
+from markusanderle.PERC_AOV_PTB_table
+where aov_ptb_perc between 0 and 1
+and snap_month_code >= 43
+order by ACCT_ID, snap_month_code;
+
+grant select on PERC_AOV_PTB to bnanduri;
+
+select * from markusanderle.TOTAL_AOV_PTB_table
+order by snap_month_code desc;
+
+select count(*) from PERC_AOV_PTB; -- 7844071
+
+
+select snap_month_code,acct_id from dflanery.USG_DTLS_NEW_MNTHLY_INNR
+where acct_id in ('001300000025utK','0013000001GUe8U','0013000001HfJsT','00100000001L5zm','00130000002xHGY','0013000000ZmCCO','0010000000273GP','00100000001Z2K7','0013000000K7Ith','0013000001MsMla')
+order by snap_month_code,acct_id;
+
+select snap_month_code,acct_id,min_date from MarkusAnderle.train_data
+where acct_id in ('001300000025utK','0013000001GUe8U','0013000001HfJsT','00100000001L5zm','00130000002xHGY','0013000000ZmCCO','0010000000273GP','00100000001Z2K7','0013000000K7Ith','0013000001MsMla')
+order by snap_month_code,acct_id, min_date;
+
+select snap_month_code,acct_id,min_date from MarkusAnderle.train_data
+where acct_id = '0013000000Gtw2g'
+
+order by snap_month_code,acct_id, min_date;
+
+SELECT * FROM MarkusAnderle.acv_ptb
+where account_id = '0013000000Gtw2g' 
+--('00130000002xHGY','0013000000ZmCCO','0010000000273GP','00100000001Z2K7','0013000000K7Ith','0013000001MsMla')
+--and ptb_product = 'App'
+order by snap_month_code;
+
+-------------------------------> Create TABLE train_data;
+
+select trunc(snap_month) from dflanery.metrics_metadata_red;
+select to_date(snap_month) from dflanery.metrics_metadata_red;
+select min_date from markusanderle.min_acct_date;
+select to_date(min_date,'yyyy/mm/dd') from markusanderle.min_acct_date;
+
+select * from markusanderle.train_data;
+
+select * from train_data;
+
+DROP TABLE train_data;
+
+CREATE TABLE train_data AS
+SELECT A.ACCOUNT_ID,  
+A.SNAP_MONTH_CODE,
+to_char(a.snap_month, 'yyyy/mm/dd') as snap_month_date,
+a.CLOUD,
+    CASE WHEN  A.AOV <= 10000
+     THEN '1-10K'
+  WHEN  A.AOV > 10000 AND A.AOV <=50000    
+     THEN '10-50K'
+  WHEN  A.AOV > 50000 AND A.AOV <=200000
+     THEN '50-200K'
+  WHEN  A.AOV > 200000 AND A.AOV <=600000
+     THEN '200-600K'
+  WHEN  A.AOV > 600000
+     THEN 'More than 600K'  
+  ELSE '' END as AOVBAND,
+  a.ORGTYPE     ,
+  ROUND(A.ACCOUNT_AGE / 365.0) as account_age_years   ,
+  (a.snap_month-to_date(min_date,'YYYY/MM/DD')) as account_age ,      
+  a.NON_PORTAL_LICENSES_MEAN ,     
+  a.NP_LICENSES_S             ,    
+  case when a.NON_PORTAL_LIC_UTIL_MEAN > 1 then 1 else  a.NON_PORTAL_LIC_UTIL_MEAN end as NON_PORTAL_LIC_UTIL_MEAN   ,   
+  a.NON_PORTAL_LIC_UTIL_S       ,  
+  case when a.NON_PORTAL_TLP_MEAN > 1 then 1 else  a.NON_PORTAL_TLP_MEAN end as NON_PORTAL_TLP_MEAN   ,   
+  a.NON_PORTAL_TLP_S              ,
+  a.NON_PORTAL_USERS_MEAN         ,
+  a.NON_PORTAL_USERS_S            ,
+  a.NUM_ACT_WORKFLOW_RULES_MEAN   ,
+  a.NUM_ACT_WORKFLOW_RULES_S      ,
+  a.NUM_CUSTOM_APPS_MEAN          ,
+  a.NUM_CUSTOM_APPS_S             ,
+  a.CUSTOM_OBJECTS_NUM_mean ,
+  a.CUSTOM_OBJECTS_NUM_S ,
+  a.NUM_DASHBOARDS_MEAN           ,
+  a.NUM_DASHBOARDS_S              ,
+  a.LCK_EMP_CNT_MEAN              ,
+  a.APEX_LOC_WRITTEN_MEAN         ,
+  a.APEX_LOC_WRITTEN_S            ,
+  a.ACT_CHATR_USR_NUM_MEAN        ,
+  a.ACT_CHATR_USR_NUM_S           ,
+  case when a.PCT_CHATR_CONTRIB_MEAN > 1 then 1 else  a.PCT_CHATR_CONTRIB_MEAN end as PCT_CHATR_CONTRIB_MEAN   ,   
+  case when a.NON_PORTAL_USERS_MEAN > 0 then  (NVL(CRUDSSTD_MEAN,0) + NVL(CRUDSCST_MEAN,0)) / a.NON_PORTAL_USERS_MEAN else 0 end as CRUDS_NPUSER,
+  a.PCT_CHATR_CONTRIB_S,  
+  a.REPORTS_NUM_MEAN              ,
+  a.REPORTS_NUM_S                 ,
+  a.AOV                          , 
+  a.AOV_D                        ,
+  a.FTM_OP_TOTAL                  ,
+  a.TTM_TOTAL_PG                  ,
+  a.TTM_TOTAL_ACV                , 
+  a.PAYDEX   ,                     
+  a.RED_FLAG  ,
+  a.CUST_REC_CNT_MEAN             ,
+  a.CUST_REC_CNT_S                ,
+  a.STD_REC_CNT_MEAN              ,
+  a.STD_REC_CNT_S         ,                           
+  B.SALES_LIC   ,
+  B.SERVICE_LIC ,
+  B.PLAT_LIC    ,
+  B.TOTAL_LIC   ,
+  B.ACT_SELF_SVC_USERS_NUM_AVG ,
+  nvl(B.CASES_NUM_AVG,0)  CASES_NUM_AVG ,
+  nvl(B.CASES_CRTD_IN_LAST_7D_NUM_AVG,0) CASES_CRTD_IN_LAST_7D_NUM_AVG ,
+  nvl(B.CASE_REC_TYPES_NUM_AVG,0) CASE_REC_TYPES_NUM_AVG,
+  nvl(B.CASE_QUEUES_NUM_AVG,0) CASE_QUEUES_NUM_AVG,
+  nvl(B.CASE_ASSIGN,0) CASE_ASSIGN,
+  nvl(B.CASE_ESCAL,0) CASE_ESCAL,
+  nvl(B.WEB2CASES,0) WEB2CASES,
+  nvl(B.EMAIL2CASES,0)EMAIL2CASES ,
+  nvl(B.VF_PG_TOT_NUM_AVG,0) VF_PG_TOT_NUM_AVG,
+  nvl(B.CASE_SHARING_RULES_NUM_AVG,0) CASE_SHARING_RULES_NUM_AVG,
+  c.*,
+  g.EMAIL_TEMPLATES_NUM_AVG,
+  g.MAIL_MERG_TEMPLATES_NUM_AVG,
+g.MASS_EMAILS_NUM_AVG,
+g.S1PENETRATION_AVG,
+g.CONTACTS_NUM_AVG,
+g.ACCTS_CNTCTS_PER_USER_NUM_AVG,
+g.ACTIVITIES_PER_USER_NUM_AVG,
+g.ACTIVITIES_NUM_AVG,
+g.OPPTS_PER_USER_NUM_AVG,  
+g.OPPTS_NUM_AVG,
+g.ACT_CAMPAIGNS_NUM_AVG,
+g.CAMPAIGNS_NUM_AVG,
+g.LEADS_PER_USER_NUM_AVG, 
+g.LEAD_ASSIGNMENT_RULES_NUM_AVG,
+g.LEAD_SHARING_RULES_NUM_AVG,
+g.LEADS_NUM_AVG,
+g.SOLUTIONS_NUM_AVG, 
+g.ACCTS_NUM_AVG,
+g.CAL_EVENTS_NUM_AVG,
+g.CSTM_FLDS_NUM_AVG,
+g.CSTM_FORMULA_FLDS_NUM_AVG,
+g.DOC_NUM_AVG,
+g.ADMINS_NUM_AVG, 
+g.ESCLTN_RULES_NUM_AVG,
+g.IDEAS_NUM_AVG,
+g.LANGS_IN_USE_NUM_AVG,
+g.PRICEBOOKS_NUM_AVG,
+g.QUOTES_NUM_AVG,
+g.RECORDS_PER_USER_CUST_AVG,
+g.REPORTS_NUM_AVG,
+g.REPORTS_PER_USER_AVG,
+g.USR_ROLES_NUM_AVG,
+g.VALIDATION_RULES_NUM_AVG,
+g.CREDS_REPORT_DASH_PER_USER_AVG,
+g.CREDS_OPPTIES_PER_USER_AVG,
+g.CREDS_LEADS_PER_USER_AVG,
+g.CREDS_CAMPAIGN_PER_USER_AVG,
+g.CREDS_PRODUCT_PER_USER_AVG,
+g.LOGINS_CONSOLE_PER_USER_AVG,
+g.CREDS_ENTITLEMENT_PER_USER_AVG,
+g.WEB_USER_REQS_AVG,
+g.ROLES_SECURITY_ADOPTION_AVG,
+g.TOTAL_MAU_AVG,
+g.ENGAGEMENT_SALES_SCR_AVG,
+g.LIC_UTIL_SALES_SCR_AVG,
+g.ENGAGEMENT_SERVICE_SCR_AVG,
+g.CHANNEL_SALES_SCR_AVG,
+Data_AOV, PARDOT_AOV,
+CASE WHEN Data_AOV >= 1000 THEN 1 ELSE 0 END as DATAFLAG,
+CASE WHEN PARDOT_AOV >= 1000 THEN 1 ELSE 0 END as PARDOTFLAG
+FROM dflanery.metrics_metadata_red a 
+INNER join dflanery.EWS_CASE b
+on a.SNAP_MONTH_CODE = b.SNAP_MONTH_CODE and A.ACCOUNT_ID = b.ACCOUNT_ID
+inner join account_master c
+on A.ACCOUNT_ID = c.ACCT_ID_NK 
+INNER join dflanery.USG_DTLS_NEW_MNTHLY_INNR g
+on a.SNAP_MONTH_CODE = g.SNAP_MONTH_CODE and A.ACCOUNT_ID = g.ACCT_ID 
+inner join AOV_PRODUCT_SNAP h
+on a.SNAP_MONTH = h.snap_date and a.ACCOUNT_ID = h.acct_id
+where c.cur_aov > 1000 and c.paying=1 
+and a.snap_month_code<= 77
+and a.snap_month >= to_date('1 Jan 2014'); 
+
+from markusanderle.train_data;
+ 
+-- Data till May 2016 / SNAP 76 
+select * from markusanderle.min_acct_date;
+
+select AOV_STEELBRICK_FLAG from markusanderle.train_data_mkt
+where acct_id = '00100000000Cc6Q';
+
+select * from markusanderle.acv_ptb
+where account_id = '00100000000Cc6Q'
+and PTB_product = 'Partner Community';
+
+select * from markusanderle.train_data
+where ACCT_ID_NK = '00100000000Cc6Q'
+and snap_month_code = 55;
+
+SELECT * FROM dflanery.EWS_CASE;
+
+select * from dflanery.AOVBEGINPRODUCT;
+
+select PROD_CLOUD_NM, PROD_LN_NM, PROD_NM from dflanery.AOVBEGINPRODUCT
+group by PROD_CLOUD_NM, PROD_LN_NM, PROD_NM 
+order by PROD_CLOUD_NM;
+-- 'Data Cloud', 'Pardot'
+
+SELECT * FROM dflanery.USG_DTLS_NEW_MNTHLY_INNR;
+
+select count(*) from markusanderle.train_data; -- 7764762
+
+select count(*) from markusanderle.train_data_mkt; -- 7764762
+
+
+select * from AOV_PRODUCT_SNAP;
+
+drop table AOV_PRODUCT_SNAP;
+
+create table AOV_PRODUCT_SNAP as
+SELECT 
+acct_id, 
+snap_date, 
+SUM(CASE WHEN  PROD_CLOUD_NM = ('Data Cloud') THEN BEGINAOV ELSE 0 END)  as Data_AOV,
+SUM(CASE WHEN  PROD_CLOUD_NM = ('Pardot') THEN BEGINAOV ELSE 0 END) as Pardot_AOV
+FROM dflanery.AOVBEGINPRODUCT
+--where Data_AOV > 1000 --and Pardot_AOV > 1000 
+group by acct_id, snap_date
+order by acct_id, snap_date desc;
+
+select * from dflanery.metrics_metadata_red
+where ACCOUNT_ID in ('0010000000000AN', '0010000000000aT');
+
+-- 0010000000000AN	5/1/2016    131934.12
+-- 0010000000000aT	12/1/2015	0	47400
+
+select * from dflanery.ACCOUNT_MAPPING_PAYING;
+
+select distinct PRODUCT,FAMILY_CD, ptb_product,CI_PRODUCT_CLOUD, LEVEL1, LEVEL2  from markusanderle.acv_ptb
+group by PRODUCT,FAMILY_CD, ptb_product,CI_PRODUCT_CLOUD, LEVEL1, LEVEL2
+order by family_cd;
+
+select snap_month, snap_month_code from markusanderle.acv_ptb
+group by snap_month, snap_month_code
+order by snap_month, snap_month_code;
+
+
+SELECT * FROM dflanery.acv_product
+where ACCOUNT_ID in ('001000000000xtH')
+and snap_month_code in (25,49)
+--and PRODUCT = 'App Dev'
+order by product, snap_month_code;
+
+-- '001000000002x8Z', '00100000000nxmw');
+
+--001000000017LU2
+
+select * from markusanderle.acv_ptb
+where PRODUCT = 'App Dev'
+and acv > 100000;
+
+SELECT * FROM dflanery.ACV_PRODUCT;
+
+
+select count(*), ptb_segment from markusanderle.acv_ptb
+--where ptb_product = 'App'
+--and acv between 7500 and 20000
+--and acv between 100000 and 200000
+--and acv > 7500
+--and snap_month_code >= 43
+group by ptb_segment;
+
+-- ESMB: EBU = 50K; CMRCL 25K; ESMB 7.5K
+
+
+select count(*), a.ACCOUNT_MACROSEGMENT_DERIVED AS MACROSEGMENT, a.ACCT_MKT_SEG_NM_DERIVED as MARKETSEGMENT
+from dflanery.ACCOUNT_MAPPING_PAYING a
+group by a.ACCOUNT_MACROSEGMENT_DERIVED, a.ACCT_MKT_SEG_NM_DERIVED
+order by count(*);
+
+
+select SNAP_MONTH_CODE, ACCOUNT_ID from dflanery.metrics_metadata_red
+where ACCOUNT_ID in ('0010000000000AN', '0010000000000aT');
+
+SELECT * FROM dflanery.acv_product
+where PRODUCT = 'App Dev'
+and acv > 300000
+order by account_id, snap_month_code;
+
+select snap_month, snap_month_code from jgonzalez.acv_product
+group by snap_month, snap_month_code
+order by snap_month, snap_month_code;
+
+DELETE from ptb_history; 
+
+select count(distinct acct_id) from jgonzalez.usage_CBU;
+
+select * from markusanderle.PTB_ACCOUNT_ARCHIVE;
+
+grant select on ptb_history_v3 to dflanery;
+
+grant select on ptb_history to MarkusAnderle;
+
+grant select on ptb_history to bnanduri;
+
+
+select SNAP_MONTH_CODE, PRODUCT, FAMILY_NM, count(account_id), round(sum(acv),0) 
+from DFLANERY.MARKETING_CLOUD_ACV@bidwprd_bu
+group by SNAP_MONTH_CODE, PRODUCT, FAMILY_NM
+order by SNAP_MONTH_CODE, PRODUCT, FAMILY_NM;
+
+select * from DFLANERY.MARKETING_CLOUD_ACV@bidwprd_bu
+where account_id = '00130000000lFgi';
+
+select * from DFLANERY.MARKETING_CLOUD_AOV@bidwprd_bu;
+
+select * from markusanderle.acv_ptb
+where PRODUCT = 'SteelBrick'
+--and ACCOUNT_ID in ('001000000000xtH')
+--and snap_month_code in (25,49)
+order by product, snap_month_code;
+
+select snap_month_code, sum(acv) from markusanderle.acv_ptb
+where PRODUCT = 'SteelBrick'
+--and ACCOUNT_ID in ('001000000000xtH')
+--and snap_month_code in (25,49)
+group by snap_month_code
+order by snap_month_code;
+
+select sum(acv) from markusanderle.acv_ptb
+where PRODUCT = 'SteelBrick';
+
+select count(*) from markusanderle.acv_ptb;
+
+SELECT * from DFLANERY.marketing_cloud_acv_dump;
+
+--Accounts by MC AE
+
+select * from DM.WV_ALL_MEMBER_ACCTS@bidwprd_bu;
+
+
+-- Similar companies recommendation
+
+select acct_id, AOV_APP_FLAG, AOV,CUSTOM_EWS_AVG  from markusanderle.train_data
+where aov >10000;
+
+
+select * from markusanderle.train_data
+where acct_id in ('0013000000HFk0d')
+order by snap_month_code desc;
+
+select count(*), SNAP_MONTH_CODE 
+from markusanderle.train_data_mkt
+group by SNAP_MONTH_CODE;
+
+
+select AOV_MARKETIN_FLAG from markusanderle.train_data_mkt;
+
+select count(*) from markusanderle.train_data;
+
+select count(*) from markusanderle.acv_ptb; -- 1.17Mn
+
+ 
+select * from markusanderle.acv_ptb
+where ptb_product  like '%Steel%';
+
+select * from markusanderle.min_acct_date;
+
+select * from ptb_current_scores;
+
+select * from markusanderle.train_data
+where ACCT_ID in ('0013000001Gibrm','0013000001GhUDS','0013000000ZjGSN','0013000000M2ixo','0013000000HFA0r', '0013000001KbhMD')      --'0010M00001NYgo9'
+order by ACCT_ID,snap_month_code;
+
+Select ACCT_ID, SNAP_MONTH_CODE,LCK_EMP_CNT_MEAN, SALES_CLOUD_QTY_AVG+SERVICE_CLOUD_QTY_AVG+CUSTOM_CLOUD_QTY_AVG-NUM_LIC_OEM_CUST_AVG as Lic,
+NON_PORTAL_LICENSES_MEAN, NUM_LIC_SFDC_AVG, TOTAL_LIC ,SALES_CLOUD_QTY_AVG, SERVICE_CLOUD_QTY_AVG, CUSTOM_CLOUD_QTY_AVG, NUM_LIC_OEM_CUST_AVG, NUM_LIC_OEM_SFDC_AVG, NUM_LIC_SFDC_OTHER_SKU_AVG, NUM_LIC_SFDC_SALES_SKU_AVG, NUM_LIC_SFDC_SALES_USG_AVG, NUM_LIC_SFDC_SERVICE_SKU_AVG
+from markusanderle.train_data
+where ACCT_ID in ('0013000000HFk0d')
+order by SNAP_MONTH_CODE
+--','0013000001GhUDS','0013000000ZjGSN','0013000000M2ixo','0013000000HFA0r', '0013000001KbhMD')      --'0010M00001NYgo9'
+
+select * from markusanderle.PERC_AOV_PTB_table;
+
+select count(*) from markusanderle.PERC_AOV_PTB_table;
+
+
+select distinct(ptb_product) from markusanderle.PERC_AOV_PTB_table;
+
+
+
+select * from markusanderle.TOTAL_AOV_PTB_table;  
+
+select * from markusanderle.AOV_PTB_table;  
+
+
+
+select min(snap_month_code) from markusanderle.train_data;
+
+SELECT ACCT_ID,SNAP_MONTH_CODE, sum(AOV_PTB_PERC),
+CASE WHEN PTB_PRODUCT = 'Sales'
+     THEN AOV_PTB_PERC
+     --Else 0
+End as App_Perc
+CASE WHEN PTB_PRODUCT = 'Sales'
+     THEN AOV_PTB_PERC
+     --Else 0
+End as App_Perc
+from PERC_AOV_PTB
+--group by acct_id,snap_month_code,PTB_PRODUCT
+order by acct_id,snap_month_code;
+
+select count(*) from dflanery.PTB_FY17_LOAD_ARCHIVE_ACCT;
+
+
+select unique score_for,DATE_CREATED, DATE_LOADED, NOTES, CREATED_FOR_PERIOD, DATA_AS_OF_DATE, ptb_segment_numeric
+from dflanery.PTB_FY17_LOAD_ARCHIVE_ACCT
+where score_for like '%Steel%'  
+order by score_for,DATA_AS_OF_DATE;
+
+select * from markusanderle.train_data;
+
+select 
+--a.ACCT_ID, PTB_MKT_SEGMENT, ptb_segment_numeric
+count(distinct a.acct_id) 
+--acct_id, ptb_segment_numeric
+from dflanery.PTB_FY17_LOAD_ARCHIVE_ACCT a
+left join BNANDURI.TRAIN_DATA_MARCH b
+on (a.ACCT_ID = b.ACCT_ID)
+and (a.DATA_AS_OF_DATE = b.SNAP_MONTH)
+where score_for like '%Partner%'
+--and ptb_segment_numeric in     (4,5) 
+and DATA_AS_OF_DATE = (select max(DATA_AS_OF_DATE) from dflanery.PTB_FY17_LOAD_ARCHIVE_ACCT where score_for like '%Steel%')
+and PTB_MKT_SEGMENT in ('EBU','CMRCL');
+
+select * from markusanderle.train_data;
+
+select * from dflanery.PTB_FY17_LOAD_ARCHIVE_ACCT a left join markusanderle.train_data b on (a.ACCT_ID = b.ACCT_ID) and (a.DATA_AS_OF_DATE = b.SNAP_MONTH) where score_for = 'Service Cloud' and ptb_segment_numeric in (4,5) and DATA_AS_OF_DATE = (select max(DATA_AS_OF_DATE) from dflanery.PTB_FY17_LOAD_ARCHIVE_ACCT where score_for = 'Service Cloud') and PTB_MKT_SEGMENT in ('EBU');
+
+
+
+select * from dflanery.PTB_FY17_LOAD_ARCHIVE_ACCT;
+
+select * from GAHUJA.CC_EWS_USER_LOGIN_PIVOT_FINAL;
+
+select Acct_id, ptb_segment_numeric from dflanery.PTB_FY17_LOAD_ARCHIVE_ACCT a left join markusanderle.train_data b on (a.ACCT_ID = b.ACCT_ID) and (a.DATA_AS_OF_DATE = b.SNAP_MONTH) where score_for = 'Service Cloud' and ptb_segment_numeric in (4,5) and DATA_AS_OF_DATE = (select max(DATA_AS_OF_DATE) from dflanery.PTB_FY17_LOAD_ARCHIVE_ACCT where score_for = 'Service Cloud') and PTB_MKT_SEGMENT in ('EBU');
+
+select * from dflanery.PTB_FY17_LOAD_ARCHIVE_ACCT where score_for = 'Service Cloud';
+
+select Acct_id, ptb_segment_numeric from dflanery.PTB_FY17_LOAD_ARCHIVE_ACCT a left join markusanderle.train_data b on (a.ACCT_ID = b.ACCT_ID) and (a.DATA_AS_OF_DATE = b.SNAP_MONTH) where score_for = 'Service Cloud' and ptb_segment_numeric in (4,5) and DATA_AS_OF_DATE = (select max(DATA_AS_OF_DATE) from dflanery.PTB_FY17_LOAD_ARCHIVE_ACCT where score_for = 'Service Cloud') and PTB_MKT_SEGMENT in ('EBU');
+
+select * from account_master;
+-- ACCT_ID_NK, account_name, 
+
+select * from dm.dim_contact@bidwprd_bu 
+where acct_id is not NULL;
+
+select ACCT_ID_NK, account_name, marketsegment, full_nm, usr_id, ph_num, email_id, job_lvl_nm, city_nm, zip_cd, 
+from account_master
+left join dm.dim_contact@bidwprd_bu 
+on ACCT_ID_NK = acct_id;
+
+select count(*) from BNANDURI.train_data_mkt_bk;
+
+select * from markusanderle.acv_ptb;
+
+select count(*) from markusanderle.min_acct_date;
+
+select count(*) from BNANDURI.TRAIN_DATA_MARCH;
+
+SELECT * from PTB_HISTORY;
+
+SELECT count(*), product, upl_date 
+from DILIPPATEL.PTB_HISTORY_V3
+group by product, upl_date;
+
+SELECT count(*), product, upl_date 
+from DILIPPATEL.PTB_HISTORY_v3
+group by product, upl_date;
+
+SELECT min(PROB), max(PROB), product, SEGMENT_NEW 
+from DILIPPATEL.PTB_HISTORY_v3
+--where product <> 'Marketing'
+group by product, SEGMENT_NEW
+order by product, SEGMENT_NEW;
+
+
+UPDATE DILIPPATEL.PTB_HISTORY SET upl_date = '04-20-17';
+
+DELETE from DILIPPATEL.PTB_HISTORY;
+
+Commit;
+
+select count(*) from perc_aov_ptb;
+
+
+create table PTB_HISTORY_v3 
+as select * from PTB_HISTORY;
+
+Commit;
+
+select count(*),score_for  from bnanduri.COMPARABLE_ACCTS
+group by score_for;
+
+select * from dflanery.dim_prod_dist_skus_plus
+where level1 = 'Service - Lightning - Field Service';
+
+select * from BDS_OPS.AI_ACV;
+
+select * from BDS_OPS.AI_Account_Master;
+
+select YEAR_STARTED__C from BDS_OPS.AI_ACV;
+
+select count(distinct ACCT_ID)  from BDS_OPS.AI_ACV
+where PXE_CLOUD_NM = 'Field Service'
+and ACV > 1
+order by SKU_CD;
+
+select sum(ACV), Snap_month_code, acct_id, DRVD_REGN_NM  from BDS_OPS.AI_ACV
+where PXE_CLOUD_NM = 'Field Service'
+and ACV > 1
+group by Snap_month_code, acct_id, DRVD_REGN_NM  
+order by Snap_month_code desc;
+
+select sum(ACV), acct_id, DRVD_REGN_NM  from BDS_OPS.AI_ACV
+where PXE_CLOUD_NM = 'Field Service'
+and ACV > 1
+group by acct_id, DRVD_REGN_NM ;
+
+select sum(ACV),PXE_CLOUD_NM,level1, PTB_PRODUCT, Snap_month_code,DRVD_REGN_NM
+from BDS_OPS.AI_ACV
+where level1 like '%Quip%'
+or level2 like '%Quip%'
+or level3 like '%Quip%'
+or PXE_CLOUD_NM like '%Quip%'
+group by PXE_CLOUD_NM,level1, PTB_PRODUCT, Snap_month_code,DRVD_REGN_NM
+order by Snap_month_code desc;
+
+select distinct level1,level2, level3,PXE_CLOUD_NM,PTB_product
+from BDS_OPS.AI_ACV
+where level1 like '%Quip%'
+or level2 like '%Quip%'
+or level3 like '%Quip%'
+or PXE_CLOUD_NM like '%Quip%'
+group by level1,level2,level3,PXE_CLOUD_NM, PTB_product;
+
+select distinct level1,level2,level3
+from dflanery.dim_prod_dist_skus_plus
+group by level1,level2,level3;
+
+select * from markusanderle.acv_ptb;
+
+select ORG_TYP,ACCOUNT_AGE,ACCT_ID,ACT_CAMPAIGNS_NUM_AVG,ACT_CHATR_USR_NUM_AVG,ACT_SHR_RULES_NUM_AVG,ACTIVITIES_NUM_AVG,WORKFLOW_RULES_NUM_AVG,ACTIVITIES_PER_USER_NUM_AVG,AOV,AOV_ADVISORY_SERVICES_FLAG,AOV_ANALYTICS_FLAG,AOV_APP_FLAG,AOV_C_COMMUNITY_FLAG,AOV_CLOUD_SERVICES_OTHER_FLAG,AOV_D,AOV_E_COMMUNITY_FLAG,AOV_MCS_FLAG,AOV_OTHER_FLAG,AOV_P_COMMUNITY_FLAG,AOV_PARDOT_FLAG,AOV_PREMIER_FLAG,AOV_SALES_FLAG,AOV_SANDBOX_FLAG,AOV_SERVICE_FLAG,AOV_SHIELD_FLAG,AOV_STORAGE_FLAG,AOV_MARKETING_FLAG,AOVBAND,APEX_LOC_APPS_AVG,APEX_LOC_WRITTEN_AVG,API_REQS_CNT_AVG,API_REQS_USER_AVG,CASE_ASSIGN,CASE_ESCAL,CASE_QUEUES_NUM_AVG,CASES_NUM_AVG,CASES_PER_USER_NUM_AVG,CHATTER_UTILIZATION_AVG,CLOUD,COLLAB_CLOUD_QTY_AVG,COMBO_ID,CONTACTS_NUM_AVG,CREDS_ACCT_CONT_PER_USR_AVG,CREDS_ACTIVITIES_PER_USER_AVG,CREDS_API_CASES_PER_USER_AVG,CREDS_CAMPAIGN_PER_USER_AVG,CREDS_CASES_PER_USER_AVG,CREDS_CTI_PER_USER_AVG,CREDS_LEADS_PER_USER_AVG,CREDS_OPPTIES_PER_USER_AVG,CREDS_PER_USER_CUST_AVG,CREDS_PER_USER_STD_AVG,CREDS_PRODUCT_PER_USER_AVG,CREDS_QUOTE_PER_USER_AVG,CREDS_REPORT_DASH_PER_USER_AVG,CREDS_SOLUTIONS_PER_USER_AVG,CSTM_FLDS_NUM_AVG,CSTM_FORMULA_FLDS_NUM_AVG,CTI_REQS_CNT_AVG,CURRENCIES_NUM_AVG,CUST_CRED_CNT_AVG,CUST_REC_CNT_AVG,CUST_REC_PER_USER_NUM_AVG,CUSTOBJ_API_REQS_CNT_AVG,CUSTOM_APPS_NUM_AVG,SERVICE_CLOUD_QTY_AVG,CUSTOM_CLOUD_QTY_AVG,CUSTOM_OBJ_SHR_RULES_NUM_AVG,CUSTOM_OBJECT_RECORDS_NUM_AVG,CUSTOM_OBJECTS_NUM_AVG,CUSTOM_PAGES_NUM_AVG,CUSTOM_RPT_TYP_NUM_AVG,CUSTOM_TABS_NUM_AVG,DASHBOARDS_NUM_AVG,DATA_CLOUD_QTY_AVG,DERIVED_INDUSTRY,DERIVED_SUB_SECTOR,EMAIL_TEMPLATES_NUM_AVG,EMAIL2CASES,ESCLTN_RULES_NUM_AVG,FTM_OP_TOTAL,LCK_EMP_CNT_MEAN,LEAD_ASSIGNMENT_RULES_NUM_AVG,LEAD_SHARING_RULES_NUM_AVG,LEADS_NUM_AVG,LEADS_PER_USER_NUM_AVG,LIC_UTIL_CUSTOM_SCR_AVG,LIC_UTIL_OEM_ADJ_CUST_AVG,LIC_UTIL_OEM_ADJ_SFDC_AVG,LOGINS_CONSOLE_PER_USER_AVG,MACROSEGMENT,PTB_MKT_SEGMENT,PTB_MKT_SEGMENT_NEW,MASS_EMAILS_NUM_AVG,MIN_DATE,NON_DISTINCT_RPT_VIEWS_CNT_AVG,NON_PORTAL_LIC_UTIL_MEAN,NON_PORTAL_LIC_UTIL_S,NON_PORTAL_TLP_MEAN,NON_PORTAL_USERS_MEAN,NON_PORTAL_USERS_S,NON_POST_FILE_UPLD_LST_14D_AVG,NUM_ACT_WORKFLOW_RULES_AVG,NUM_API_CALLS_AVG,NON_PORTAL_LICENSES_MEAN,NUM_S2S_ACTIVE_CONNECTIONS_AVG,OPPT_SHARING_RULES_NUM_AVG,OPPTS_NUM_AVG,OPPTS_PER_USER_NUM_AVG,PAGE_VIEWS_NUM_AVG,PORTAL_LIC_UTIL_MEAN,NUM_LIC_CUST_AVG,PORTAL_TLP_MEAN,PORTAL_USERS_MEAN,PRICEBOOKS_NUM_AVG,PRODUCTS_NUM_AVG,QUOTES_NUM_AVG,RECORDS_PER_USER_CUST_AVG,RECORDS_PER_USER_STD_AVG,REGION,REPORT_CNT_AVG,REPORT_VIEW_CNT_AVG,REPORT_VIEWS_AVG,REPORTS_NUM_AVG,REPORTS_PER_USER_AVG,NUM_LIC_SFDC_AVG,SALES_EWS_AVG,PORTAL_LICENSES_MEAN,SERVICE_CONTRACTS_PER_USER_AVG,SERVICE_EWS_AVG,SITES_NUM_AVG,SNAP_MONTH,SNAP_MONTH_CODE,SNAP_MONTH,SOLUTIONS_NUM_AVG,STD_CRED_CNT_AVG,STD_REC_CNT_AVG,TASKS_NUM_AVG,TLP_14D_CUST_AVG,TLP_14D_SFDC_AVG,TOT_SHARING_RULES_AVG,TOTAL_LIC,TTM_TOTAL_ACV,TTM_TOTAL_PG,VALIDATION_RULES_NUM_AVG,VF_PG_TOT_NUM_AVG,WEB_API_REQS_AVG,WEB_CASE_CNT_AVG,WEB2CASES,WEB_USER_REQS_AVG,ACCT_NM,LCK_EMP_CNT_S,MC_SMSMOBILEORIGINATED,MC_EMAILLOGINS,MC_EXPORT,MC_MOBILE_LOGINS,MC_WEBAPP_LOGINS from BDS_OPS.AI_TRAIN_DATA;
+
+select PTB_MKT_SEGMENT from BDS_OPS.AI_TRAIN_DATA;
+
+select PTB_MKT_SEGMENT ,PTB_MKT_SEGMENT_NEW from BDS_OPS.AI_TRAIN_DATA;
+
+select * from BDS_OPS.AI_ACV;
+
+SELECT count(*) from BDS_OPS.AI_TRAIN_DATA;
+
+SELECT count(*) from BDS_OPS.AI_ACV; -- 3757886
+
+select * from bds_ops.ai_stg_comp_accts;
+
+
+
+-- DBlinks
+
+ALTER USER DILIPPATEL IDENTIFIED BY Citi1bank REPLACE Ku4K#iax_alg_oKCX_fr;
+
+drop database link bidwprd_bu;
+
+CREATE DATABASE LINK bidwprd_bu
+CONNECT TO DILIPPATEL
+IDENTIFIED BY "K7e8_6kkk_G7e8_6yuR"
+USING '(DESCRIPTION=
+               (ADDRESS=(PROTOCOL=tcp)(HOST=db-bidwprd.internal.salesforce.com)(PORT=1531))
+           (CONNECT_DATA=
+               (SERVICE_NAME=bidwprd_bu)
+           )
+       )';
+       
+drop database link odsprd_bu;
+       
+CREATE DATABASE LINK odsprd_bu
+CONNECT TO DILIPPATEL
+IDENTIFIED BY "Kb5u_h3ft_Eb5u_h3ft"
+USING '(DESCRIPTION=
+               (ADDRESS=(PROTOCOL=tcp)(HOST=db-odsprd.internal.salesforce.com)(PORT=1531))
+           (CONNECT_DATA=
+               (SERVICE_NAME=odsprd_bu)
+           )
+       )';
+
+        
+SELECT * FROM COMBO_COMPANY;
+
+SELECT table_name FROM user_tables where grantee = 'jgonzalez';
+  
+  select * from jgonzalez.dba_tables;
+  
+  Select tablespace_name, table_name from user_tables;
+ 
+SELECT owner, table_name
+  FROM jgonzalez;
+
+select * from jgonzalez.all_tab_privs;
+
+select * from jgonzalez.dba_sys_privs;
+select * from jgonzalez.dba_role_privs;
+
+------------------------------------------------------------------------
+
+  -- USAGE month by month with every metric by account and slopes (there are a couple of metrics with are obsolete, you can see there are blank)
+select * from jgonzalez.metrics_metadata_red;
+
+grant select on jgonzalez.metrics_metadata_red to markusanderle;
+
+grant select on jgonzalez.metrics_metadata to markusanderle;
+
+grant select on jgonzalez.ews_case to markusanderle;
+
+--- Current account mapping for all account, pay and no pay, you can filter paying = 1 to get the current accounts
+-- Used for Account hirarchies
+select * from jgonzalez.account_mapping_paying;
+
+--- Used to idetify PTB segments 
+-- Forward looking openpipe 12 months
+select * from jgonzalez.FTM_OPENPIPE_CUSTOM;
+
+select * from jgonzalez.FTM_OPENPIPE_SALES;
+
+select * from jgonzalez.FTM_OPENPIPE_SERVICE;
+
+select * from jgonzalez.FTM_OPENPIPE_ALL;
+
+select * from dflanery.FACT_OPENPIPE;
+
+-- Last 12 months ACV
+select * from jgonzalez.TTM_SALES_ACV;
+
+select * from jgonzalez.TTM_SERVICE_ACV;
+
+select * from jgonzalez.TTM_TOTAL_ACV;
+
+select * from jgonzalez.TTM_CUSTOM_ACV;
+
+select max(snap_month_code) from dflanery.TTM_CUSTOM_ACV;
+
+-- Last 12 months Pipegen (all stages included)
+select * from jgonzalez.TTM_SALES_PIPEGEN;
+
+select * from jgonzalez.TTM_SERVICE_PIPEGEN;
+
+select * from jgonzalez.TTM_TOTAL_PIPEGEN;
+
+select * from jgonzalez.TTM_CUSTOM_PIPEGEN;
+
+-- Additional tables
+
+Select * FROM jgonzalez.first_snap;
+
+SELECT * FROM jgonzalez.paying_CBU;
+
+SELECT MKT_SEGMENT
+FROM jgonzalez.paying_CBU
+group by MKT_SEGMENT;
+
+--- Main table used  in the PTB model
+-- What is paying ?
+SELECT * FROM jgonzalez.paying_MM;
+
+SELECT * FROM jgonzalez.usage_CBU;
+
+-- service_lic, account_age (days)
+
+SELECT * FROM jgonzalez.usage_EBU;
+
+
+SELECT * FROM dflanery.ACV_custom;
+
+SELECT * FROM flanery.acv_new_wave@BIDWPRD_BU;
+
+SELECT * FROM jgonzalez.FTM_OPENPIPE_PRODUCT; 
+
+SELECT * FROM jgonzalez.TTM_PIPEGEN_TOTAL;
+
+SELECT * FROM jgonzalez.TTM_PIPEGEN_PRODUCT;
+
+SELECT * FROM jgonzalez.FTM_OPENPIPE_TOTAL ;
+
+SELECT * FROM jgonzalez.TTM_TOTAL_ACV ;
+
+SELECT * FROM jgonzalez.TTM_PRODUCT_ACV_NEW;
+
+SELECT * FROM jgonzalez.ews_case;
+
+SELECT PRODUCT from jgonzalez.acv_product group by PRODUCT;
+
+SELECT * FROM jgonzalez.account_mapping_paying;
+
+SELECT * FROM jgonzalez.COMBO_COMPANY;
+
+SELECT * FROM first_snap;
+SELECT * FROM paying_CBU;
+SELECT * FROM paying_MM;
+SELECT * FROM usage_CBU;
+SELECT * FROM usage_MM;
+
+SELECT * FROM ACV_PRODUCT;
+
+-- product definition table
+select * from markusanderle.product_details_fix;
+
+SELECT * FROM FTM_OPENPIPE_PRODUCT;
+ 
+SELECT * FROM jgonzalez.TTM_PIPEGEN_TOTAL;
+
+SELECT * FROM jgonzalez.TTM_PIPEGEN_PRODUCT;
+
+SELECT * FROM jgonzalez.FTM_OPENPIPE_TOTAL;
+
+SELECT * FROM TTM_TOTAL_ACV;
+SELECT * FROM TTM_PRODUCT_ACV_NEW;
+
+SELECT * FROM jgonzalez.ews_case;
+
+SELECT count(*) FROM jgonzalez.usage_CBU;
+
+SELECT * FROM jgonzalez.usage_MM;
+
+SELECT * FROM jgonzalez.usage_FS;
+
+SELECT * FROM jgonzalez.AOVBEGINPRODUCT;
+
+SELECT * FROM jgonzalez.PROPENSITY_COMMUNITIES_1; 
+
+SELECT * FROM CFL_DM.dim_product;
+
+SELECT * FROM dflanery.AOVBEGINPRODUCT;
+
+SELECT * FROM dflanery.metrics_metadata_red;
+
+SELECT * FROM jgonzalez.metrics_metadata_red;
+
+SELECT * FROM metrics_metadata_red;
+
+SELECT * FROM jgonzalez.PROPENSITY_COMMUNITIES_TEST;
+
+SELECT * FROM jgonzalez.PROPENSITY_COMMUNITIES_TRAIN_C;
+
+SELECT * FROM jgonzalez.final2Company;
+
+SELECT * FROM PROPENSITY_COMMUNITIES_TEST;
+
+SELECT * FROM jgonzalez.first_snap;
+
+SELECT * from Community_SKU;
+
+Select Count(*) from Community_SKU where prod_type = 'Files';
+
+DELETE from Community_SKU where prod_type = 'Files';
+
+commit;
+
+select * from markusanderle.acv_ptb;
+
+select * from dflanery.PTB_ALL_FY17_PROD_FLAGS;
+
+select * from markusanderle.acv_ptb
+where snap_month_code in (74,75,76);
+
+SELECT distinct ci_product_cloud, product, level1, level2 from markusanderle.acv_ptb
+where ci_product_cloud in ('Service Cloud')
+or product in ('Service Cloud') 
+--and level2 <> 'Sandbox'
+group by ci_product_cloud, product,level1,level2
+order by ci_product_cloud;
+
+SELECT sum(ACV) from markusanderle.acv_ptb
+where snap_month_code in (74,75,76)
+and ci_product_cloud in ('Service Cloud')
+and product in ('Service Cloud');
+
+select * from dflanery.acv_product
+where snap_month_code in (74,75,76);
+
+select PRODUCT, round(sum(ACV),0) from dflanery.acv_product
+where snap_month_code in (74,75,76)
+--and product in ('Heroku','Custom Cloud','Service Cloud')
+group by product
+order by round(sum(ACV),0) desc;
+
+-------------------------------> BIDWPRD_BU Data 
+
+
+select * from dflanery.ACCOUNT_MAPPING_PAYING where ACCT_LVL_4_USR_NM = 'Tony Owens';
+
+select Distinct ACCOUNT_MACROSEGMENT_DERIVED from dflanery.ACCOUNT_MAPPING_PAYING;
+
+--'7372';
+
+select * from dflanery.ACCOUNT_MAPPING_PAYING;
+
+SELECT * from DM.DIM_AA_CONSOLIDATED_SIC_MULTI@bidwprd_bu;
+-- B2B_B2C_FLG
+
+SELECT * from DM.DIM_SIC_MASTER@bidwprd_bu;
+-- SUB_IND_NM, IND_NM, SUB_SECTOR_NM, IDC_IND_NM, DIM_SIC_MASTER_KY (4 digit), SIC_CD (3 digit)
+
+SELECT METRIC_NM,
+  METRIC_TYP,
+  UI_FLD_NM,
+  UI_FLD_NUM,
+  UI_LABEL_NM,
+  MDN_FLG,
+  TRND_FLG
+FROM DM_S.DIM_EWS_METRIC_REF;
+
+
+SELECT VERS,
+  CLOUD_NM,
+  METRIC_NM,
+  METRIC_CAT,
+  BASE_WT,
+  SALES_WT,
+  SERVICE_WT,
+  CUSTOM_WT,
+  REC_STRT_DT,
+  REC_END_DT,
+  DEL_FLG,
+  AUDIT_ETL_JOB_INS_KEY,
+  AUDIT_ETL_JOB_INS_TS,
+  AUDIT_ETL_JOB_UPD_KEY,
+  AUDIT_ETL_JOB_UPD_TS
+FROM DM_S.DIM_EWS_METRIC_WT_REF ;
+
+-------------------------------> ODS queries
+
+-- INDUSTRY__C, SUB_INDUSTRY__C, SUB_SECTOR__C, SIC_CODE__C(3 digit), OWNERID
+
+select * from ods.ODS_SIC_CODE__C@odsprd_bu;
+
+
+select * from ods.ODS_SIC_MASTER@odsprd_bu;
+-- SIC_CODE, ORG_62_INDUSTRY, ORG_62_SUB_INDUS, IDC_VERTICAL_SECTOR, SECTOR, Industry, Segment
+
+select id_15,ANNUALREVENUE,LOCKED_INDUSTRY__C,
+LOCKED_SECTOR__C,FY_SIC__C,
+LOCKED_SUBSECTOR__C,SOLDDATE__C from ods.ods_account@odsprd_bu where id_15='00100000000SSNP';
+
+select * from ods.ods_account@odsprd_bu where id_15 in ('0013000000Hiaim', '00130000002xWEZ','0013000000HF54f');
+
+-- DECISION_DATE__C, SOLDDATE__C, ORG_CREATE_DATE__C
+
+-------------------------------> SQL queries
+
+select type, prod_nm from PORTAL_PRODUCTS 
+where type = 'Customer Portal'
+group by type, prod_nm
+order by type;
+
+select count(distinct prod_nm),type from PORTAL_PRODUCTS 
+--where type = 'Customer Portal'
+group by type
+order by type;
+
+Select Count(*) from Community_SKU;
+
+select prod_type,sku_type, prod_nm,type from PORTAL_PRODUCTS 
+FULL OUTER JOIN Community_SKU
+on (sku_type=prod_nm)
+--where sku_type like '%Gov Cloud%'
+--where type is null or prod_type is null
+group by sku_type, prod_nm,prod_type,type
+order by prod_type, type
+
+
+SELECT * from  PORTAL_PRODUCTS 
+where type is null;
+
+Select * from PORTAL_PRODUCTS_SKU;
+
+drop table PORTAL_PRODUCTS_SKU;
+
+
+select a.DIM_PROD_KY,a.TYPE,a.SKU_CD,a.PROD_ID,a.PROD_NM,a.PROD_LN_NM,a.FLASH_CAT_CD,a.FAMILY_CD,a.STAT_CD,a.PROD_FAMILY_CD,a.FLAG,
+b.DIM_PROD_KY,b.CLOUD,b.COMMUNITYTYPE,b.SKU_CD,b.PROD_ID,b.PROD_NM,b.PROD_LN_NM,b.FLASH_CAT_CD,b.FAMILY_CD,b.STAT_CD,b.PROD_FAMILY_CD
+from PORTAL_PRODUCTS a full join PORTAL_PRODUCTS_SKU b
+on a.SKU_CD=b.SKU_CD
+where b.CLOUD='Community Cloud'
+
+SELECT * from PORTAL_PRODUCTS_SKU where SKU_CD not in (select SKU_CD from PORTAL_PRODUCTS);
+
+select * from partner_community;
+
+select ACCT_DETAIL_ID, PARTNER_COMMUNITY_CATEGORY__C, PARTNER_COMMUNITY_SCORE__C, ACC_ID, CUST_ACV, PART_ACV 
+from partner_community
+LEFT JOIN FY16_ACV
+on (ACCT_DETAIL_ID = ACC_ID)
+
+-- FY16 Community Analysis
+
+select * from FY16_ACV;
+
+select ACCT_DETAIL_ID, PARTNER_COMMUNITY_CATEGORY__C, PARTNER_COMMUNITY_SCORE__C, ACC_ID, CUST_ACV, PART_ACV 
+from partner_community
+FULL OUTER JOIN FY16_ACV
+on (account_id = ACC_ID);
+
+drop table temp1;
+
+select * from Comm_FY16_Acc
+
+commit;
+
+CREATE TABLE temp1 AS
+
+SELECT a.*, b.*, c.* 
+from Comm_FY16_Acc a 
+FULL OUTER JOIN PROPENSITY_COMMUNITIES_TEST b
+ON (trim(a.act_ID) = b.ACCOUNT_ID)
+FULL OUTER JOIN FY16_ACV c
+on (trim(a.act_ID) = ACC_ID)
+
+where a.act_id = '0013000000HF54f'
+
+
+
+select * from Comm_FY16_Acc 
+
+SELECT a.*, b.*
+from Comm_FY16_Acc a 
+FULL OUTER JOIN PROPENSITY_COMMUNITIES_TEST b
+ON (trim(act_id) = b.ACCOUNT_ID)
+where trim(act_id) = '0013000000HF54f'
+
+select * from PROPENSITY_COMMUNITIES_TEST where Account_id = '0013000000HF54f';
+
+delete from FY16_ACV
+commit;
+
+select * from FY16_ACV
+
+alter table Comm_FY16_Acc
+modify (prob number);
+
+ALTER TABLE Comm_FY16_Acc RENAME COLUMN ACCOUNT_ID to act_id;
+    
+ALTER TABLE FY16_ACV Add COMBO_ID char(20);
+
+ALTER TABLE FY16_ACV DROP COLUMN EMP_ACV;
+
+ALTER TABLE FY16_ACV DROP COLUMN TOT_ACV;
+  
+select * from FY16_ACV
+
+
+where TYPECOMMUNITY = 'Customer';
+
+select * from temp1 
+where ACCOUNT_ID = '00130000002xWEZ';
+
+
+select * from dflanery.ACCOUNT_MAPPING_PAYING;
+
+where ACCT_ID_NK in ('0013000000Hiaim', '00130000002xWEZ','0013000000HF54f')
+
+select * from JGONZALEZ.HISTORY_PROPENSITY_COMMUNITIES
+
+where Account_id = '0013000000HF54f';
+
+
+
+select * from PROPENSITY_COMMUNITIES_TEST
+where Account_id = '0013000000HF54f';
+
+select * from temp1 where Account_id = '00130000002xAOd';
+
+
+
+select * from JGONZALEZ.HISTORY_PROPENSITY_COMMUNITIES;
+
+select count(*) from temp;
+
+select count(ACCOUNT_ID) from temp;
+
+select distinct count(ACCOUNT_ID) from temp;
+ 
+select count(*) from JGONZALEZ.HISTORY_PROPENSITY_COMMUNITIES;
+
+select * from JGONZALEZ.HISTORY_PROPENSITY_COMMUNITIES;
+
+select count(*) from PROPENSITY_COMMUNITIES_TEST 
+
+select * from PARTNER_COMMUNITY_ANALYSIS
+
+grant select on PROPENSITY_COMMUNITIES_TEST to MARKUSANDERLE;
+commit;
+
+-- FY16 performance analysis
+
+
+select * from temp1;
+
+
+select * from temp1
+where COMP_NAME like '%Schneider Electric SA%'
+
+group by prediction
+
+select COMBO_COMPANY_ID from JGONZALEZ.ACCOUNT_MAPPING_PAYING 
+where ACCT_ID_NK = '0013000001GDoRZ'
+
+
+SELECT a.*, b.* from JGONZALEZ.ACCOUNT_MAPPING_PAYING a
+right JOIN Comm_FY16_Acc b
+On ACCT_ID_NK = trim(act_id)
+where COMBO_COMPANY_ID = 'aBR300000004UWM'
+
+
+where COMBO_COMPANY_ID = 'aBR300000004UZN'
+
+select * from Comm_FY16_Acc where ACCOUNT_NAME like '%Schneider%'
+
+select * from Comm_FY16_Acc where ACCOUNT_NAME like '%Johnson Controls%'
+
+select * from Comm_FY16_Acc where ACCOUNT_NAME like '%Aon%'
+
+select * from Comm_FY16_Acc where ACCOUNT_NAME like '%Knowledge%'
+
+select * from Comm_FY16_Acc where ACCOUNT_NAME like '%AT&' || 'T%'
+
+select * from Comm_FY16_Acc where Act_id = '0013000000HF54f'
+ACCOUNT_NAME
+
+select * from MarkusAnderle.bo_combo;
+
+select MACRO_SEGMENT, COUNT(COMBO_ID), sum(CUSTOMER_COMMUNITY), sum(PARTNER_COMMUNITIES), sum(total)
+from MarkusAnderle.bo_combo
+group by MACRO_SEGMENT
+
+select sum(total)
+from MarkusAnderle.bo_combo
+group by MACRO_SEGMENT
+
+grant select on FY16_ACV to MarkusAnderle;
+
+select * from FY16_ACV;
+
+select sum(CUST_ACV) + sum(PART_ACV) from FY16_ACV;
+
+delete from FY16_ACV
+where BU = 'ESMB'
+
+-- FY16 Analysis v2
+select BU, count(distinct COMBO_ID), sum(CUST_ACV), SUM(PART_ACV)
+from FY16_ACV
+group by BU;
+
+select * from Comm_FY16_Acc 
+
+drop table Comm_FY16_Combo
+
+create table Comm_FY16_Combo as
+select trim(ACT_ID) as ACT_ID, PROB, COMBO_COMPANY_ID, trim(Prediction) Pred
+from Comm_FY16_Acc 
+LEFT JOIN JGONZALEZ.ACCOUNT_MAPPING_PAYING
+ON (trim(act_ID) = ACCT_ID_NK)
+
+select * from Comm_FY16_Combo
+
+select count(*) from Comm_FY16_Combo
+
+select * from FY16_ACV 
+
+select * from Comm_FY16_Combo_ACV
+
+create table Comm_FY16_Combo_ACV as
+SELECT a.*, b.*
+from Comm_FY16_Combo a 
+FULL OUTER JOIN FY16_ACV b
+on (act_ID = ACC_ID)
+
+select * from Comm_FY16_Combo_ACV
+
+select sum(CUST_ACV) + sum(PART_ACV) from Comm_FY16_Combo_ACV
+
+/*create table Comm_FY16_Combo_ACV_v1 as
+select BU, COMBO_COMPANY_ID, max(PROB) as prob, sum(part_ACV) as part_ACV, sum(CUST_ACV) as CUST_ACV 
+from Comm_FY16_Combo_ACV
+group by COMBO_COMPANY_ID, BU
+*/
+drop table Comm_FY16_Combo_ACV_v1
+
+create table Comm_FY16_Combo_ACV_v1 as
+select distinct COMBO_COMPANY_ID, max(PROB) as prob
+from Comm_FY16_Combo_ACV
+group by COMBO_COMPANY_ID
+
+select count(*) from Comm_FY16_Combo_ACV_v1
+
+drop table Comm_FY16_Combo_ACV_v2
+
+create table Comm_FY16_Combo_ACV_v2 as
+select a.*, b.pred 
+from Comm_FY16_Combo_ACV_v1 a
+left join Comm_FY16_Combo_ACV b
+on a.COMBO_COMPANY_ID = b.COMBO_COMPANY_ID
+and a.prob = b.prob
+
+select * from Comm_FY16_Combo_ACV_v2
+
+create table Comm_FY16_Combo_ACV_v3 as
+select a.*, b.pred as new_pred
+from Comm_FY16_Combo_ACV a
+left join Comm_FY16_Combo_ACV_v2 b
+on a.COMBO_COMPANY_ID = b.COMBO_COMPANY_ID
+
+select * from Comm_FY16_Combo_ACV_v3
+
+select BU, new_pred, count(distinct COMBO_COMPANY_ID), count (distinct COMBO_ID),sum(cust_acv), sum(part_acv) from Comm_FY16_Combo_ACV_v3
+where part_acv > 0
+group by BU, new_pred
+
+select BU, count (distinct COMBO_ID),sum(cust_acv), sum(part_acv) from FY16_ACV
+group by BU
+
+
+select count(distinct COMBO_COMPANY_ID) from Comm_FY16_Combo_ACV_v1
+
+select sum(cust_acv),sum(part_acv) from Comm_FY16_Combo_ACV_v1
+
+where COMBO_COMPANY_ID is not null
+
+select * from Comm_FY16_Combo_ACV where prob = '0.0246054048229566'
+
+delete from Comm_FY16_Combo_ACV_v1
+where COMBO_COMPANY_ID is null
+and CUST_ACV is null
+and PART_ACV is null
+
+
+select * from Comm_FY16_Combo_ACV_v1
+
+select BU, COMBO_COMPANY_ID,  from Comm_FY16_Combo_ACV
+where COMBO_COMPANY_ID is null
+
+select count(distinct COMBO_COMPANY_ID) from Comm_FY16_Combo_ACV_v1
+
+select COMBO_COMPANY_ID, count(COMBO_COMPANY_ID) from Comm_FY16_Combo_ACV_v1
+group by COMBO_COMPANY_ID
+order by count(COMBO_COMPANY_ID) desc
+
+select * from Comm_FY16_Combo_ACV_v1 where COMBO_COMPANY_ID = 'aBR300000004V3w'
+
+where a.prob is not null
+
+select * from Comm_FY16_Combo_ACV
+
+select count(*) from (
+select a.CUST_ACV, a.PART_ACV, a.BU, pred, comp_name, acc_name 
+from Comm_FY16_Combo_ACV_v2 a
+LEFT JOIN Comm_FY16_Combo_ACV b
+ON (a.prob = b.prob) and (a.COMBO_COMPANY_ID = b.COMBO_COMPANY_ID)
+where a.prob is not null
+and a.COMBO_COMPANY_ID is not null
+)
+
+drop table Community_PTB 
+
+create table Community_PTB as
+select a.*, COMBO_ID, pred, comp_name, acc_name 
+from Comm_FY16_Combo_ACV_v2 a
+LEFT JOIN Comm_FY16_Combo_ACV b
+ON (a.prob = b.prob) 
+and a.COMBO_COMPANY_ID is not null
+and a.COMBO_COMPANY_ID is not null
+and (a.COMBO_COMPANY_ID = b.COMBO_COMPANY_ID)
+
+select b.bu, a.pred, count(a.combo_id), sum(b.cust_ACV), sum(b.part_acv) 
+from Community_PTB a
+inner join FY16_ACV b
+on a.combo_id = b.combo_id
+group by b.bu, a.pred
+
+
+
+select sum(CUST_ACV), sum(PART_ACV), BU from Comm_FY16_Combo_ACV_v1
+group by BU
+
+select sum(CUST_ACV), sum(PART_ACV), BU from Community_PTB
+group by BU
+
+where COMBO_COMPANY_ID is not null
+
+from Comm_FY16_Combo_ACV_v1 a
+LEFT JOIN Comm_FY16_Combo_ACV b
+ON (a.prob = b.prob)
+and (a.COMBO_COMPANY_ID = b.COMBO_COMPANY_ID)
+and a.COMBO_COMPANY_ID is not null
+
+select * from FY16_ACV 
+
+where COMBO_ID is null
+
+select * from Community_PTB
+where COMBO_ID is null
+and (CUST_ACV > 0
+or PART_ACV > 0)
+
+select sum(CUST_ACV) + sum(PART_ACV)  from Community_PTB
+
+and (CUST_ACV > 0
+or PART_ACV > 0)
+
+
+select *
+from Community_PTB
+where BU is not NULL
+group by BU, Pred
+
+order by BU
+
+
+select count (*) from Community_PTB
+
+
+select * from temp
+select * from temp1
+select count(*) from temp1
+select count(*) from temp
+select count(*) from Community_PTB
+select count(*) from Comm_FY16_Acc
+select count(*) from PROPENSITY_COMMUNITIES_TEST
+
+select * from FY16_ACV
+
+
+SELECT a.*, b.*, c.* 
+from Comm_FY16_Acc a 
+FULL OUTER JOIN PROPENSITY_COMMUNITIES_TEST b
+ON (trim(a.act_ID) = b.ACCOUNT_ID)
+FULL OUTER JOIN FY16_ACV c
+on (trim(a.act_ID) = ACC_ID)
+
+select COMBO_COMPANY_ID, ACCT_ID_NK from JGONZALEZ.ACCOUNT_MAPPING_PAYING 
+where ACCT_ID_NK = '0013000001GDoRZ'
+
+select * from Comm_FY16_Combo_ACV_v2
+
+select a.* 
+from Comm_FY16_Combo_ACV a
+INNER JOIN Comm_FY16_Combo_ACV_v2 b
+ON (a.prob = b.prob) 
+and (a.COMBO_COMPANY_ID = b.COMBO_COMPANY_ID)
+
+select * from jgonzalez.account_mapping_paying;
+
+
+-- Service cloud lic count by BU, Geo
+-- 1. query 1
+select ROUND(a.ACCOUNT_AGE / 365.0) as account_age_years,  b.SALES_LIC
+FROM dflanery.metrics_metadata_red a 
+INNER join JGONZALEZ.EWS_CASE b
+on a.SNAP_MONTH_CODE = b.SNAP_MONTH_CODE and A.ACCOUNT_ID = B.ACCOUNT_ID 
+where a.account_id = '0010000000000AN'
+and a.SNAP_MONTH_CODE > 68
+
+-- 1. query 2
+select SHIPPING_REGION, ACCOUNT_MACROSEGMENT_DERIVED, SNAP_MONTH, sum(SALES_LIC) AS MACROSEGMENT
+FROM dflanery.metrics_metadata_red a
+inner join dflanery.ACCOUNT_MAPPING_PAYING b
+on A.ACCOUNT_ID = b.ACCT_ID_NK 
+INNER join dflanery.EWS_CASE c
+on a.SNAP_MONTH_CODE = c.SNAP_MONTH_CODE and A.ACCOUNT_ID = c.ACCOUNT_ID 
+where EXTRACT(month FROM a.SNAP_MONTH) = 1
+group by SHIPPING_REGION, ACCOUNT_MACROSEGMENT_DERIVED, SNAP_MONTH
+order by snap_month;
+
+-- 1. query 2
+select SHIPPING_REGION, ACCOUNT_MACROSEGMENT_DERIVED, SNAP_MONTH, sum(SALES_LIC) AS MACROSEGMENT
+FROM dflanery.metrics_metadata_red a
+inner join dflanery.ACCOUNT_MAPPING_PAYING b
+on A.ACCOUNT_ID = b.ACCT_ID_NK 
+INNER join dflanery.EWS_CASE c
+on a.SNAP_MONTH_CODE = c.SNAP_MONTH_CODE and A.ACCOUNT_ID = c.ACCOUNT_ID 
+where EXTRACT(month FROM a.SNAP_MONTH) = 1
+--and SHIPPING_REGION = 'AMER'
+group by SHIPPING_REGION, ACCOUNT_MACROSEGMENT_DERIVED, SNAP_MONTH
+order by snap_month;
+
+
+-- Convert row to column / pivot
+select account_id, partnerflag, 
+  case when snap_month_code = 27 then 1 end smc27,
+  case when snap_month_code = 39 then 1 end smc39,
+  case when snap_month_code = 51 then 1 end  smc51,
+  case when snap_month_code = 63 then 1 end smc63
+  from PROPENSITY_COMMUNITIES_TRAIN_P;
+
+select * from account_master;
+
+-- replace names in values
+--replace(replace(CLOUDS, 'Customer Success, ',''),', Customer Success','') as CLOUDS_n,
+
+-- Date
+--where snap_date < to_date('01-Feb-16')
+
+select * from dflanery.USG_DTLS_NEW_MNTHLY_INNR;
+
+select count(*) from ptb_history;
+
+select score_for, DATA_AS_OF_DATE
+from dflanery.PTB_FY17_LOAD_ARCHIVE_ACCT
+where score_for='App Cloud'
+group by score_for, DATA_AS_OF_DATE
+order by score_for, DATA_AS_OF_DATE;
+
+drop table temp;
+
+select acct_id, DATA_AS_OF_DATE,PTB_Segment
+from dflanery.PTB_FY17_LOAD_ARCHIVE_ACCT
+where score_for='App Cloud'
+group by acct_id,DATA_AS_OF_DATE,PTB_Segment
+order by acct_id; 
+
+select * from App_PTB;
+
+create table App_PTB as
+SELECT * FROM
+(
+  SELECT acct_id,PTB_SEGMENT, DATA_AS_OF_DATE
+  FROM dflanery.PTB_FY17_LOAD_ARCHIVE_ACCT
+  where score_for='App Cloud'
+  group by acct_id,PTB_SEGMENT, DATA_AS_OF_DATE
+)
+PIVOT
+(
+  Min(PTB_SEGMENT)
+  FOR DATA_AS_OF_DATE IN ('01-Nov-2015','01-Jul-2016')
+)
+ORDER BY acct_id;
+
+select count(distinct acct_id) from App_PTB;
+
+SELECT count(distinct acct_id)
+FROM dflanery.PTB_FY17_LOAD_ARCHIVE_ACCT
+where score_for='App Cloud'
+and DATA_AS_OF_DATE = '01-Nov-2015';
+  
+SELECT count(distinct acct_id)
+FROM dflanery.PTB_FY17_LOAD_ARCHIVE_ACCT
+where score_for='App Cloud'
+and DATA_AS_OF_DATE = '01-Jul-2016';
+  
+SELECT *
+FROM dflanery.PTB_FY17_LOAD_ARCHIVE_ACCT
+where score_for='App Cloud'
+and DATA_AS_OF_DATE = '01-Nov-2015'
+order by acct_id;
+
+
+select * from DFLANERY.MARKETING_CLOUD_ACV@bidwprd_bu;
+
+select * from account_master;
+
+select * from BNANDURI.OPENPIPE_NEW;
+
+select * from dm.dim_contact@bidwprd_bu;
+
+
+
